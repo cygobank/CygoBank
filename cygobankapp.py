@@ -408,6 +408,54 @@ def get_phone_format_help(country):
         return f"Example: {fmt['example']} | Format: {fmt['description']}"
     return ""
 
+# ========== SSN VALIDATION ==========
+def validate_ssn(ssn):
+    """Validate SSN format (XXX-XX-XXXX)"""
+    # Acceptable formats: 123-45-6789 or 123456789
+    pattern = r'^(?:\d{3}-\d{2}-\d{4}|\d{9})$'
+    if not re.match(pattern, ssn):
+        return False
+    # Additional validation: avoid all zeros or invalid SSN ranges
+    digits_only = ssn.replace('-', '')
+    if digits_only == '000000000' or digits_only == '666000000':
+        return False
+    # First three digits cannot be 000
+    if digits_only[:3] == '000':
+        return False
+    # Area number (first 3) cannot be 666
+    if digits_only[:3] == '666':
+        return False
+    return True
+
+# ========== DOB VALIDATION ==========
+def validate_dob(dob_str):
+    """Validate DOB format (dd/mm/yyyy) and check if it's a valid date"""
+    pattern = r'^(0[1-9]|[12][0-9]|3[01])/(0[1-9]|1[012])/(\d{4})$'
+    if not re.match(pattern, dob_str):
+        return False
+    
+    try:
+        day, month, year = dob_str.split('/')
+        day, month, year = int(day), int(month), int(year)
+        
+        # Check if date is valid
+        datetime(year, month, day)
+        
+        # Check if person is at least 18 years old
+        today = datetime.now()
+        age = today.year - year - ((today.month, today.day) < (month, day))
+        if age < 18:
+            return False
+        
+        # Check if year is reasonable (not in future, not too old)
+        if year > today.year or year < (today.year - 120):
+            return False
+        
+        return True
+    except ValueError:
+        return False
+
+
 # ========== EMAIL FUNCTIONS ==========
 def send_email_notification(recipient_email, subject, message_body):
     """Send email notification"""
@@ -528,6 +576,27 @@ def create_account_page():
         phone_help = get_phone_format_help(country)
         phone_number = st.text_input("Phone Number", help=phone_help, placeholder=COUNTRY_PHONE_FORMATS[country]['example'])
         
+        ssn = st.text_input("Social Security Number (SSN)", placeholder="e.g., 123-45-6789", help="Format: XXX-XX-XXXX")
+        
+        dob = st.text_input("Date of Birth", placeholder="e.g., 15/06/1990", help="Format: DD/MM/YYYY")
+        
+        st.markdown("---")
+        st.subheader("📍 Address Information")
+        street_address = st.text_input("Street Address", placeholder="e.g., 123 Main Street")
+        
+        col1, col2 = st.columns(2)
+        with col1:
+            apartment = st.text_input("Apt/Suite (Optional)", placeholder="e.g., Apt 456")
+        with col2:
+            city = st.text_input("City", placeholder="e.g., New York")
+        
+        col3, col4 = st.columns(2)
+        with col3:
+            county = st.text_input("County (Optional)", placeholder="e.g., Kings County")
+        with col4:
+            zip_code = st.text_input("Zip Code", placeholder="e.g., 10001")
+        
+        st.markdown("---")
         initial_deposit = st.number_input("Initial Deposit ($)", min_value=10.0, value=100.0)
         
         submitted = st.form_submit_button("Create Account", use_container_width=True)
@@ -548,13 +617,36 @@ def create_account_page():
                 st.error("❌ Phone number cannot be empty!")
             elif not validate_phone(phone_number, country):
                 st.error(f"❌ Invalid phone format for {country}! Expected format: {get_phone_format_help(country)}")
+            elif not ssn:
+                st.error("❌ SSN cannot be empty!")
+            elif not validate_ssn(ssn):
+                st.error("❌ Invalid SSN format! Expected format: XXX-XX-XXXX (e.g., 123-45-6789)")
+            elif not dob:
+                st.error("❌ Date of Birth cannot be empty!")
+            elif not validate_dob(dob):
+                st.error("❌ Invalid DOB format or you must be at least 18 years old! Expected format: DD/MM/YYYY (e.g., 15/06/1990)")
+            elif not street_address:
+                st.error("❌ Street address cannot be empty!")
+            elif not city:
+                st.error("❌ City cannot be empty!")
+            elif not zip_code:
+                st.error("❌ Zip code cannot be empty!")
             else:
                 # Create account
                 accounts[account_number] = {
                     'name': name,
                     'email': email,
                     'phone': phone_number,
+                    'ssn': ssn,
+                    'dob': dob,
                     'country': country,
+                    'address': {
+                        'street': street_address,
+                        'apartment': apartment,
+                        'city': city,
+                        'county': county,
+                        'zip_code': zip_code
+                    },
                     'balance': initial_deposit,
                     'created': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
                     'transactions': [{
@@ -574,6 +666,8 @@ def create_account_page():
                 
                 # Send welcome email
                 subject = "🎉 Welcome to Cy_Bank!"
+                apt_info = f"\nApartment/Suite: {apartment}" if apartment else ""
+                county_info = f"\nCounty: {county}" if county else ""
                 body = f"""
 Dear {name},
 
@@ -582,6 +676,11 @@ Welcome to Cy_Bank! Your account has been created successfully.
 Account Number: {account_number}
 Phone Number: {phone_number}
 Country: {country}
+
+Address:
+{street_address}{apt_info}
+{city}, {zip_code}{county_info}
+
 Initial Deposit: ${initial_deposit:.2f}
 
 Thank you for choosing Cy_Bank!
@@ -929,6 +1028,29 @@ def show_settings(account_number):
     phone = st.text_input("Phone Number", value=account.get('phone', ''), 
                           help=phone_help, placeholder=COUNTRY_PHONE_FORMATS[country]['example'])
     
+    ssn = st.text_input("Social Security Number (SSN)", value=account.get('ssn', ''), 
+                        placeholder="e.g., 123-45-6789", help="Format: XXX-XX-XXXX")
+    
+    dob = st.text_input("Date of Birth", value=account.get('dob', ''), 
+                        placeholder="e.g., 15/06/1990", help="Format: DD/MM/YYYY")
+    
+    st.markdown("---")
+    st.subheader("📍 Address Information")
+    address = account.get('address', {})
+    street_address = st.text_input("Street Address", value=address.get('street', ''))
+    
+    col1, col2 = st.columns(2)
+    with col1:
+        apartment = st.text_input("Apt/Suite (Optional)", value=address.get('apartment', ''))
+    with col2:
+        city = st.text_input("City", value=address.get('city', ''))
+    
+    col3, col4 = st.columns(2)
+    with col3:
+        county = st.text_input("County (Optional)", value=address.get('county', ''))
+    with col4:
+        zip_code = st.text_input("Zip Code", value=address.get('zip_code', ''))
+    
     st.markdown("---")
     
     with st.form("settings_form"):
@@ -950,11 +1072,34 @@ def show_settings(account_number):
                 st.error("❌ Name cannot be empty!")
             elif not validate_email(email):
                 st.error("❌ Invalid email format!")
+            elif not ssn:
+                st.error("❌ SSN cannot be empty!")
+            elif not validate_ssn(ssn):
+                st.error("❌ Invalid SSN format! Expected format: XXX-XX-XXXX (e.g., 123-45-6789)")
+            elif not dob:
+                st.error("❌ Date of Birth cannot be empty!")
+            elif not validate_dob(dob):
+                st.error("❌ Invalid DOB format or you must be at least 18 years old! Expected format: DD/MM/YYYY (e.g., 15/06/1990)")
+            elif not street_address:
+                st.error("❌ Street address cannot be empty!")
+            elif not city:
+                st.error("❌ City cannot be empty!")
+            elif not zip_code:
+                st.error("❌ Zip code cannot be empty!")
             else:
                 accounts[account_number]['name'] = name
                 accounts[account_number]['email'] = email
                 accounts[account_number]['phone'] = phone
+                accounts[account_number]['ssn'] = ssn
+                accounts[account_number]['dob'] = dob
                 accounts[account_number]['country'] = country
+                accounts[account_number]['address'] = {
+                    'street': street_address,
+                    'apartment': apartment,
+                    'city': city,
+                    'county': county,
+                    'zip_code': zip_code
+                }
                 accounts[account_number]['preferences'] = {
                     'email_notifications': email_notifications,
                     'low_balance_alert': low_balance_alerts,
