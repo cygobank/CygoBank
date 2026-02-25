@@ -1,0 +1,23 @@
+{
+  "12345": {
+    "name": "Cyril Tanlaka",
+    "email": "callmecy001@gmail.com",
+    "phone": "404-401-3601",
+    "country": "USA",
+    "balance": 100000000.0,
+    "created": "2026-02-25 05:25:07",
+    "transactions": [
+      {
+        "type": "DEPOSIT",
+        "amount": 100000000.0,
+        "date": "2026-02-25 05:25:07",
+        "description": "Initial deposit"
+      }
+    ],
+    "preferences": {
+      "email_notifications": true,
+      "low_balance_alert": true,
+      "alert_threshold": 100
+    }
+  }
+}
